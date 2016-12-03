@@ -2,10 +2,13 @@ import tensorflow as tf
 import numpy as np
 import time
 from numpy.random import randn
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from tensorflow.python.client import timeline
+
+import platform
+if platform.node() == 'sumo-radar':
+    import matplotlib
+    matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Author: Dougal J. Sutherland
 def cholesky_unblocked(X, size = None):
@@ -59,21 +62,21 @@ def cholesky_blocked(A, nb = 200):
         nb - block size, A.shape[0] % nb == 0
     """
     n = A.get_shape()[0].value
-    j = 0
+
     # make A a lower triangular matrix
     A = tf.matrix_band_part(A, -1, 0)
 
     def body(A, j):
-        A11 = tf.slice(A, [j, j], [nb, nb])
-        A21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
-        A22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
+        B11 = tf.slice(A, [j, j], [nb, nb])
+        B21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
+        B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
 
-        A11 = cholesky_unblocked(A11, nb)
-        A21 = tf.matmul(A21, tf.matrix_inverse(tf.transpose(A11)))
-        A22 = A22 - tf.matmul(A21, tf.transpose(A21))
+        B11 = cholesky_unblocked(B11, nb)
+        B21 = tf.matmul(B21, tf.matrix_inverse(tf.transpose(B11)))
+        B22 = B22 - tf.matmul(B21, tf.transpose(B21))
 
-        B_left = tf.concat(0, [A11, A21])
-        B_right = add_top_padding(A22, nb, n - j - nb)
+        B_left = tf.concat(0, [B11, B21])
+        B_right = add_top_padding(B22, nb, n - j - nb)
         B = tf.concat(1, [B_left, B_right])
 
         A_left = tf.slice(A, [0, 0], [n, j])
@@ -88,7 +91,7 @@ def cholesky_blocked(A, nb = 200):
     def condition(A, j):
         return j < n
 
-    return tf.while_loop(condition, body, [A, j])[0]
+    return tf.while_loop(condition, body, [A, 0])[0]
 
 
 #
@@ -103,7 +106,7 @@ def positive_definite_tensor(N):
 def test(N):
     A = positive_definite_tensor(N)
 
-    A_chol_blocked = cholesky_blocked(A, 2)
+    A_chol_blocked = cholesky_blocked(A, 3)
     A_chol = tf.cholesky(A)
 
     with tf.Session() as s:
@@ -160,6 +163,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
                 print impl
                 tensor = data['tensor_fn'](A)
                 tf.initialize_all_variables().run()
+
                 if trace:
                     run_metadata = tf.RunMetadata()
                     options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -191,6 +195,5 @@ def benchmark_implementations(matrix_orders, plot, trace):
 # MAIN
 # ###########
 
-# benchmark_blocked([1, 50, 100, 200, 400, 500], 2000, True)
-# test(2)
-benchmark_implementations([1000, 2000, 3000, 4000, 5000, 6000, 7000], True, False)
+test(4)
+# benchmark_implementations([600], plot=False, trace=False)
