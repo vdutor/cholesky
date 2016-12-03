@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import time
 from numpy.random import randn
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tensorflow.python.client import timeline
 
@@ -178,7 +180,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
 
     if not trace and plot:
         for impl, data in implementations.iteritems():
-            plt.plot(matrix_orders, data['durations'], color=data['color'], label=impl)
+            plt.semilogy(matrix_orders, data['durations'], color=data['color'], label=impl)
 
         plt.legend(loc='best')
         plt.xlabel('N')
@@ -190,5 +192,5 @@ def benchmark_implementations(matrix_orders, plot, trace):
 # ###########
 
 # benchmark_blocked([1, 50, 100, 200, 400, 500], 2000, True)
-test(2)
-# benchmark_implementations([1000, 1200], True, False)
+# test(2)
+benchmark_implementations([1000, 2000, 3000, 4000, 5000, 6000, 7000], True, False)
