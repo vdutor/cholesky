@@ -106,7 +106,7 @@ def positive_definite_tensor(N):
 def test(N):
     A = positive_definite_tensor(N)
 
-    A_chol_blocked = cholesky_blocked(A, 3)
+    A_chol_blocked = cholesky_blocked(A, 2)
     A_chol = tf.cholesky(A)
 
     with tf.Session() as s:
