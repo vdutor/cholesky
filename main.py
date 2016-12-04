@@ -21,7 +21,7 @@ def positive_definite_tensor(N):
 
     """
     A = np.cov(randn(N, 3*N))
-    print "original matrix"
+    print "\noriginal matrix (A):"
     print A
     A = tf.Variable(A, dtype="float64")
     return A
@@ -36,17 +36,20 @@ def test(N):
     A = positive_definite_tensor(N)
 
     A_chol_blocked = cholesky_blocked(A, 3)
+    LLT = tf.matmul(A_chol_blocked, tf.transpose(A_chol_blocked))
+    error = A - LLT
     A_chol = tf.cholesky(A)
 
     with tf.Session() as s:
         tf.initialize_all_variables().run()
 
-        # A_chol_blocked = s.run(tf.matmul(A_chol_blocked, tf.transpose(A_chol_blocked)))
-        A_chol_blocked = s.run(A_chol_blocked)
+        A_chol_blocked, LLT, error = s.run([A_chol_blocked, LLT, error])
         A_chol = s.run(A_chol)
 
-        print "blocked: \n", A_chol_blocked
-        print "tf: \n", A_chol
+        print "\nblocked decomposition (L): \n", A_chol_blocked
+        print "\ntf decomposition (A): \n", A_chol
+        print "\nLLT (L computed with blocked algorithma:)\n", LLT
+        print "\nerror:\n", error
 
 
 def benchmark_blocked(block_sizes, matrix_order, plot):
@@ -84,7 +87,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
         Note: when trace is True, plotting is not possible and visa versa
 
     """
-    implementations = {'tf': {'tensor_fn': tf.cholesky, 'durations': [], 'color': 'g'},
+    implementations = {'tf': {'tensor_fn': tf.cholesky, 'durations': [], 'color': 'k'},
                        'blocked': {'tensor_fn': cholesky_blocked , 'durations': [], 'color': 'r'}}
                        # 'unblocked': {'tensor_fn': cholesky_unblocked, 'durations': [], 'color': 'b'}}
 
@@ -121,17 +124,17 @@ def benchmark_implementations(matrix_orders, plot, trace):
         for impl, data in implementations.iteritems():
             print impl
             print data
-            plt.semilogy(matrix_orders, data['durations'], color=data['color'], label=impl)
+            plt.semilogy(matrix_orders, data['durations'], '--o', color=data['color'], label=impl)
 
         plt.legend(loc='best')
         plt.xlabel('N')
         plt.ylabel('time (s)')
-        plt.show()
-        # plt.savefig('benchmark_cholesky_implementations.png')
+        # plt.show()
+        plt.savefig('updated_cholesky.png')
 
 #
 # MAIN
 #
 
-test(4)
-# benchmark_implementations([1000, 2000, 3000, 4000], plot=False, trace=False)
+# test(3)
+benchmark_implementations([1000, 2000, 3000, 4000, 5000, 6000, 7000], plot=True, trace=False)

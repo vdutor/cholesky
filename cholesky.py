@@ -63,7 +63,7 @@ def cholesky_blocked(A, nb = 200):
             B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
 
             B11 = cholesky_unblocked(B11, nb)
-            B21 = tf.matmul(B21, tf.matrix_inverse(tf.transpose(B11)))
+            B21 = tf.transpose(tf.matrix_triangular_solve(B11, tf.transpose(B21), lower=True))
             B22 = B22 - tf.matmul(B21, tf.transpose(B21))
 
             B_left = tf.concat(0, [B11, B21])
