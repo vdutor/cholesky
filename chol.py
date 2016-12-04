@@ -10,6 +10,7 @@ if platform.node() == 'sumo-radar':
     matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+
 # Author: Dougal J. Sutherland
 def cholesky_unblocked(X, size = None):
     if size is None:
@@ -25,7 +26,6 @@ def cholesky_unblocked(X, size = None):
     A = tf.matrix_band_part(X, -1, 0)
     cond = lambda j, A: j < m
     def body(j, A):
-        s = A[j, :j]
         s = A[j, :j]
         s2 = tf.matmul(tf.expand_dims(s, 0), tf.expand_dims(s, 1))[0, 0]
         Ajj = tf.sqrt(A[j, j] - s2)
@@ -55,33 +55,47 @@ def add_top_padding(X, n, m):
     return tf.concat(0, [padding, X])
 
 
-
-# Author: Vincent Dutordoir
 def cholesky_blocked(A, nb = 200):
     """
-        nb - block size, A.shape[0] % nb == 0
+        parameters:
+            A  -- 2D tensor, must have a shape
+            nb -- block size
     """
     n = A.get_shape()[0].value
+    nb2 = n % nb
 
     # make A a lower triangular matrix
     A = tf.matrix_band_part(A, -1, 0)
 
     def body(A, j):
-        B11 = tf.slice(A, [j, j], [nb, nb])
-        B21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
-        B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
+        def f1(A):
+            B11 = tf.slice(A, [j, j], [nb, nb])
+            B21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
+            B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
 
-        B11 = cholesky_unblocked(B11, nb)
-        B21 = tf.matmul(B21, tf.matrix_inverse(tf.transpose(B11)))
-        B22 = B22 - tf.matmul(B21, tf.transpose(B21))
+            B11 = cholesky_unblocked(B11, nb)
+            B21 = tf.matmul(B21, tf.matrix_inverse(tf.transpose(B11)))
+            B22 = B22 - tf.matmul(B21, tf.transpose(B21))
 
-        B_left = tf.concat(0, [B11, B21])
-        B_right = add_top_padding(B22, nb, n - j - nb)
-        B = tf.concat(1, [B_left, B_right])
+            B_left = tf.concat(0, [B11, B21])
+            B_right = add_top_padding(B22, nb, n - j - nb)
+            B = tf.concat(1, [B_left, B_right])
 
-        A_left = tf.slice(A, [0, 0], [n, j])
-        A_right = add_top_padding(B, j, n - j)
-        A = tf.concat(1, [A_left, A_right])
+            A_left = tf.slice(A, [0, 0], [n, j])
+            A_right = add_top_padding(B, j, n - j)
+            A = tf.concat(1, [A_left, A_right])
+            return A
+
+        def f2(A):
+            B11 = tf.slice(A, [j, j], [nb2, nb2])
+            B =  cholesky_unblocked(B11, nb2)
+
+            A_left = tf.slice(A, [0, 0], [n, j])
+            A_right = add_top_padding(B, j, n - j)
+            A = tf.concat(1, [A_left, A_right])
+            return A
+
+        A = tf.cond(j + nb > n, lambda: f2(A), lambda: f1(A))
 
         # TODO remove this line
         A.set_shape([n, n])
@@ -95,23 +109,27 @@ def cholesky_blocked(A, nb = 200):
 
 
 #
-# main
+# Benchmark functions
 #
 
 def positive_definite_tensor(N):
     A = np.cov(randn(N, 3*N))
+    print "original matrix"
+    print A
     A = tf.Variable(A, dtype="float64")
     return A
+
 
 def test(N):
     A = positive_definite_tensor(N)
 
-    A_chol_blocked = cholesky_blocked(A, 2)
+    A_chol_blocked = cholesky_blocked(A, 3)
     A_chol = tf.cholesky(A)
 
     with tf.Session() as s:
         tf.initialize_all_variables().run()
 
+        # A_chol_blocked = s.run(tf.matmul(A_chol_blocked, tf.transpose(A_chol_blocked)))
         A_chol_blocked = s.run(A_chol_blocked)
         A_chol = s.run(A_chol)
 
@@ -121,7 +139,6 @@ def test(N):
 
 def benchmark_blocked(block_sizes, matrix_order, plot):
     times = []
-    BNs = []
     for BN in block_sizes:
         print "\nmatrix size: ", BN
         A = positive_definite_tensor(matrix_order)
@@ -137,12 +154,8 @@ def benchmark_blocked(block_sizes, matrix_order, plot):
             print "time: ", t1 - t0
             times += [t1 - t0]
 
-        BNs += [BN]
-
     if plot:
-        fig = plt.figure(0)
-        fig.canvas.set_window_title('Block size')
-        plt.plot(BNs, times, '--o', color='r')
+        plt.plot(block_sizes, times, '--o', color='r')
         plt.xlabel('BN')
         plt.ylabel('time (s)')
         plt.show()
@@ -150,8 +163,8 @@ def benchmark_blocked(block_sizes, matrix_order, plot):
 
 def benchmark_implementations(matrix_orders, plot, trace):
     implementations = {'tf': {'tensor_fn': tf.cholesky, 'durations': [], 'color': 'g'},
-                       'blocked': {'tensor_fn': cholesky_blocked , 'durations': [], 'color': 'r'},
-                       'unblocked': {'tensor_fn': cholesky_unblocked, 'durations': [], 'color': 'b'}}
+                       'blocked': {'tensor_fn': cholesky_blocked , 'durations': [], 'color': 'r'}}
+                       # 'unblocked': {'tensor_fn': cholesky_unblocked, 'durations': [], 'color': 'b'}}
 
     for N in matrix_orders:
         print "\nmatrix size: ", N
@@ -184,16 +197,19 @@ def benchmark_implementations(matrix_orders, plot, trace):
 
     if not trace and plot:
         for impl, data in implementations.iteritems():
+            print impl
+            print data
             plt.semilogy(matrix_orders, data['durations'], color=data['color'], label=impl)
 
         plt.legend(loc='best')
         plt.xlabel('N')
         plt.ylabel('time (s)')
-        plt.savefig('benchmark_cholesky_implementations.png')
+        plt.show()
+        # plt.savefig('benchmark_cholesky_implementations.png')
 
-# ###########
+#
 # MAIN
-# ###########
+#
 
 test(4)
-# benchmark_implementations([600], plot=False, trace=False)
+# benchmark_implementations([1000, 2000, 3000, 4000], plot=False, trace=False)
