@@ -3,7 +3,7 @@ import numpy as np
 import time
 from numpy.random import randn
 from tensorflow.python.client import timeline
-from cholesky import cholesky_blocked, cholesky_unblocked
+from cholesky import cholesky_blocked, cholesky_unblocked, gradient_cholesky_blocked
 
 import platform
 if platform.node() == 'sumo-radar':
@@ -27,15 +27,28 @@ def positive_definite_tensor(N):
     return A
 
 
+def test_gradient():
+    A = positive_definite_tensor(4)
+    grad_blocked = gradient_cholesky_blocked(A)
+    grad_tf = tf.gradients(tf.cholesky(A), [A])[0]
+
+    with tf.Session() as s:
+        tf.initialize_all_variables().run()
+        # grad_blocked = s.run([grad_blocked])
+        # grad_tf = s.run([grad_tf])
+        print "gradient blocked:\n", grad_blocked
+        print "gradient tf:\n", grad_tf
+
+
 def test(N):
     """
-        runs choleskyr_ blocked and tf.cholesky on the same matrix
+        runs cholesky blocked and tf.cholesky on the same matrix
         of order N and prints the result
 
     """
     A = positive_definite_tensor(N)
 
-    A_chol_blocked = cholesky_blocked(A, 3)
+    A_chol_blocked = cholesky_blocked(A, block_size=2)
     LLT = tf.matmul(A_chol_blocked, tf.transpose(A_chol_blocked))
     error = A - LLT
     A_chol = tf.cholesky(A)
@@ -94,7 +107,6 @@ def benchmark_implementations(matrix_orders, plot, trace):
     for N in matrix_orders:
         print "\nmatrix size: ", N
         A = positive_definite_tensor(N)
-        BN = 200
 
         with tf.Session() as s:
             for impl, data in implementations.iteritems():
@@ -122,19 +134,19 @@ def benchmark_implementations(matrix_orders, plot, trace):
 
     if not trace and plot:
         for impl, data in implementations.iteritems():
-            print impl
-            print data
             plt.semilogy(matrix_orders, data['durations'], '--o', color=data['color'], label=impl)
 
+        plt.grid(True)
         plt.legend(loc='best')
         plt.xlabel('N')
         plt.ylabel('time (s)')
-        # plt.show()
-        plt.savefig('updated_cholesky.png')
+        plt.show()
+        # plt.savefig('updated_cholesky.png')
 
 #
 # MAIN
 #
 
+test_gradient()
 # test(3)
-benchmark_implementations([1000, 2000, 3000, 4000, 5000, 6000, 7000], plot=True, trace=False)
+# benchmark_implementations([1000, 2000, 3000, 4000], plot=True, trace=False)

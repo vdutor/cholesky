@@ -44,13 +44,21 @@ def add_top_padding(X, n, m):
     return tf.concat(0, [padding, X])
 
 
-def cholesky_blocked(A, nb = 200):
+def cholesky_blocked(A, matrix_order = None, block_size = 200):
     """
         parameters:
             A  -- 2D tensor, must have a shape
             nb -- block size
     """
-    n = A.get_shape()[0].value
+    nb = block_size
+    if matrix_order is not None:
+        n = matrix_order
+    else:
+        n = A.get_shape()[0].value
+
+    if n is None:
+        print "Error. Size of matrix A must be known"
+
     nb2 = n % nb
 
     # make A a lower triangular matrix
@@ -95,3 +103,11 @@ def cholesky_blocked(A, nb = 200):
         return j < n
 
     return tf.while_loop(condition, body, [A, 0])[0]
+
+
+# TODO: doesn't work yet
+def gradient_cholesky_blocked(A):
+    chol = cholesky_blocked(A, block_size=2)
+    return tf.gradients(chol, [A])[0]
+
+
