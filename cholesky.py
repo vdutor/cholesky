@@ -23,33 +23,52 @@ def cholesky_unblocked(X, size = None):
         col -= tf.matmul(A[j+1:m, :j], tf.expand_dims(A[j, :j], 1))[:, 0]
         col /= Ajj
 
-        A = tf.concat(0, [
+        A = tf.concat([
             A[:j],
-            tf.concat(1, [
+            tf.concat([
                 A[j:, :j],
-                tf.expand_dims(tf.concat(0, [tf.expand_dims(Ajj, 0), col]), 1),
+                tf.expand_dims(tf.concat([tf.expand_dims(Ajj, 0), col],0), 1),
                 A[j:, j+1:]
-            ])])
+            ],1)],0)
         A.set_shape([m, m])
         return j + 1, A
     return tf.while_loop( cond, body, (tf.constant(0, tf.int32), A))[1]
 
 
-def add_top_padding(X, n, m):
+def _padding(X, n, m):
     """
         Adds n rows of padding to the top of X.
         m equals the number of columns of X.
     """
     padding = tf.zeros((n, m), dtype=X.dtype)
-    return tf.concat(0, [padding, X])
+    return tf.concat([padding, X],0)
+
+def _chol(A,j,n,nb):
+    if j >= n:
+        return A
+    elif j + nb > n:
+        nb = n % nb
+
+    B11 = tf.slice(A, [j, j], [nb, nb])
+    B21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
+    B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
+
+    B11 = cholesky_unblocked(B11, nb)
+    B21 = tf.transpose(tf.matrix_triangular_solve(B11, tf.transpose(B21), lower=True))
+    B22 = B22 - tf.matmul(B21, tf.transpose(B21))
+
+    B_left = tf.concat([B11, B21], 0)
+    B_right = _padding(B22, nb, n - j - nb)
+    B = tf.concat([B_left, B_right], 1)
+
+    A_left = tf.slice(A, [0, 0], [n, j])
+    A_right = _padding(B, j, n - j)
+    A = tf.concat([A_left, A_right],1)
+
+    return _chol(A,j+nb,n,nb)
 
 
 def cholesky_blocked(A, matrix_order = None, block_size = 200):
-    """
-        parameters:
-            A  -- 2D tensor, must have a shape
-            nb -- block size
-    """
     nb = block_size
     if matrix_order is not None:
         n = matrix_order
@@ -59,55 +78,4 @@ def cholesky_blocked(A, matrix_order = None, block_size = 200):
     if n is None:
         print "Error. Size of matrix A must be known"
 
-    nb2 = n % nb
-
-    # make A a lower triangular matrix
-    A = tf.matrix_band_part(A, -1, 0)
-
-    def body(A, j):
-        def f1(A):
-            B11 = tf.slice(A, [j, j], [nb, nb])
-            B21 = tf.slice(A, [j + nb, j], [n - j - nb, nb])
-            B22 = tf.slice(A, [j + nb, j + nb], [n - j - nb, n - j - nb])
-
-            B11 = cholesky_unblocked(B11, nb)
-            B21 = tf.transpose(tf.matrix_triangular_solve(B11, tf.transpose(B21), lower=True))
-            B22 = B22 - tf.matmul(B21, tf.transpose(B21))
-
-            B_left = tf.concat(0, [B11, B21])
-            B_right = add_top_padding(B22, nb, n - j - nb)
-            B = tf.concat(1, [B_left, B_right])
-
-            A_left = tf.slice(A, [0, 0], [n, j])
-            A_right = add_top_padding(B, j, n - j)
-            A = tf.concat(1, [A_left, A_right])
-            return A
-
-        def f2(A):
-            B11 = tf.slice(A, [j, j], [nb2, nb2])
-            B =  cholesky_unblocked(B11, nb2)
-
-            A_left = tf.slice(A, [0, 0], [n, j])
-            A_right = add_top_padding(B, j, n - j)
-            A = tf.concat(1, [A_left, A_right])
-            return A
-
-        A = tf.cond(j + nb > n, lambda: f2(A), lambda: f1(A))
-
-        # TODO remove this line
-        A.set_shape([n, n])
-
-        return A, j + nb
-
-    def condition(A, j):
-        return j < n
-
-    return tf.while_loop(condition, body, [A, 0])[0]
-
-
-# TODO: doesn't work yet
-def gradient_cholesky_blocked(A):
-    chol = cholesky_blocked(A, block_size=2)
-    return tf.gradients(chol, [A])[0]
-
-
+    return _chol(A, 0, n, nb)

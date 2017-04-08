@@ -3,7 +3,7 @@ import numpy as np
 import time
 from numpy.random import randn
 from tensorflow.python.client import timeline
-from cholesky import cholesky_blocked, cholesky_unblocked, gradient_cholesky_blocked
+from cholesky import cholesky_blocked, cholesky_unblocked
 
 import platform
 if platform.node() == 'sumo-radar':
@@ -29,15 +29,16 @@ def positive_definite_tensor(N):
 
 def test_gradient():
     A = positive_definite_tensor(4)
-    grad_blocked = gradient_cholesky_blocked(A)
-    grad_tf = tf.gradients(tf.cholesky(A), [A])[0]
+    grad_blocked = tf.gradients(cholesky_blocked(A, block_size=2), [A])[0]
+    # grad_tf = tf.gradients(tf.cholesky(A), [A])[0]
+    # grad_tf = tf.gradients((A), [A])[0]
 
     with tf.Session() as s:
         tf.initialize_all_variables().run()
-        # grad_blocked = s.run([grad_blocked])
+        grad_blocked = s.run([grad_blocked])
         # grad_tf = s.run([grad_tf])
         print "gradient blocked:\n", grad_blocked
-        print "gradient tf:\n", grad_tf
+        # print "gradient tf:\n", grad_tf
 
 
 def test(N):
@@ -54,7 +55,7 @@ def test(N):
     A_chol = tf.cholesky(A)
 
     with tf.Session() as s:
-        tf.initialize_all_variables().run()
+        tf.global_variables_initializer().run()
 
         A_chol_blocked, LLT, error = s.run([A_chol_blocked, LLT, error])
         A_chol = s.run(A_chol)
@@ -112,7 +113,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
             for impl, data in implementations.iteritems():
                 print impl
                 tensor = data['tensor_fn'](A)
-                tf.initialize_all_variables().run()
+                tf.global_variables_initializer().run()
 
                 if trace:
                     run_metadata = tf.RunMetadata()
@@ -146,7 +147,4 @@ def benchmark_implementations(matrix_orders, plot, trace):
 #
 # MAIN
 #
-
-test_gradient()
-# test(3)
-# benchmark_implementations([1000, 2000, 3000, 4000], plot=True, trace=False)
+benchmark_implementations([10, 50], plot=True, trace=False)
