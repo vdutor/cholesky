@@ -78,4 +78,6 @@ def cholesky_blocked(A, matrix_order = None, block_size = 200):
     if n is None:
         print "Error. Size of matrix A must be known"
 
+    A = (A+tf.transpose(A))/2.
+
     return _chol(A, 0, n, nb)

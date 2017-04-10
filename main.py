@@ -21,24 +21,32 @@ def positive_definite_tensor(N):
 
     """
     A = np.cov(randn(N, 3*N))
-    print "\noriginal matrix (A):"
-    print A
+    # print "\noriginal matrix (A):"
+    # print A
     A = tf.Variable(A, dtype="float64")
     return A
 
 
 def test_gradient():
     A = positive_definite_tensor(4)
-    grad_blocked = tf.gradients(cholesky_blocked(A, block_size=2), [A])[0]
-    # grad_tf = tf.gradients(tf.cholesky(A), [A])[0]
+    # A = tf.Variable(np.eye(5))
+    tf_chol = tf.cholesky(A)
+    grad_tf = tf.gradients(tf_chol, [A])[0]
+    chol = cholesky_blocked(A, block_size=2)
+    grad_blocked = tf.gradients(chol, [A])[0]
     # grad_tf = tf.gradients((A), [A])[0]
 
     with tf.Session() as s:
-        tf.initialize_all_variables().run()
-        grad_blocked = s.run([grad_blocked])
-        # grad_tf = s.run([grad_tf])
-        print "gradient blocked:\n", grad_blocked
-        # print "gradient tf:\n", grad_tf
+        tf.global_variables_initializer().run()
+        grad_tf = s.run([A,tf_chol, grad_tf])
+        tf.global_variables_initializer().run()
+        grad_blocked = s.run([A,chol, grad_blocked])
+        print "Tensorflow"
+        print "Chol\n", grad_tf[1]
+        print "Grads\n", grad_tf[2]
+        print "Own implementation"
+        print "Chol\n", grad_blocked[1]
+        print "Grads\n", grad_blocked[2]
 
 
 def test(N):
@@ -101,8 +109,8 @@ def benchmark_implementations(matrix_orders, plot, trace):
         Note: when trace is True, plotting is not possible and visa versa
 
     """
-    implementations = {'tf': {'tensor_fn': tf.cholesky, 'durations': [], 'color': 'k'},
-                       'blocked': {'tensor_fn': cholesky_blocked , 'durations': [], 'color': 'r'}}
+    implementations = {'tf.cholesky': {'tensor_fn': tf.cholesky, 'durations': [], 'color': 'b'},
+                       'cholesky_blocked': {'tensor_fn': cholesky_blocked , 'durations': [], 'color': 'r'}}
                        # 'unblocked': {'tensor_fn': cholesky_unblocked, 'durations': [], 'color': 'b'}}
 
     for N in matrix_orders:
@@ -112,7 +120,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
         with tf.Session() as s:
             for impl, data in implementations.iteritems():
                 print impl
-                tensor = data['tensor_fn'](A)
+                tensor = tf.gradients(data['tensor_fn'](A), [A])
                 tf.global_variables_initializer().run()
 
                 if trace:
@@ -138,7 +146,7 @@ def benchmark_implementations(matrix_orders, plot, trace):
             plt.semilogy(matrix_orders, data['durations'], '--o', color=data['color'], label=impl)
 
         plt.grid(True)
-        plt.legend(loc='best')
+        # plt.legend(loc='best')
         plt.xlabel('N')
         plt.ylabel('time (s)')
         plt.show()
@@ -147,4 +155,5 @@ def benchmark_implementations(matrix_orders, plot, trace):
 #
 # MAIN
 #
-benchmark_implementations([10, 50], plot=True, trace=False)
+
+benchmark_implementations([50,100], True, False)
